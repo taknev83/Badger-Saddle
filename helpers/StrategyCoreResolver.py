@@ -177,6 +177,9 @@ class StrategyCoreResolver:
         assert after.balances("want", "sett") <= before.balances("want", "sett")
 
         # All want should be in pool OR sitting in strategy, not a mix
+        print(f'after.get("strategy.balanceOfWant") {after.get("strategy.balanceOfWant")}')
+        print(f'before.get("strategy.balanceOfPool") {before.get("strategy.balanceOfPool")}')
+        print(f'after.get("strategy.balanceOfPool") {after.get("strategy.balanceOfPool")}')
         assert (
             after.get("strategy.balanceOfWant") == 0
             and after.get("strategy.balanceOfPool")
@@ -256,10 +259,14 @@ class StrategyCoreResolver:
             # (based on a adjustable threshold parameter)
 
             # Strategy should get at least this amount of want after withdrawing from pool
+            print(f'before.get("strategy.balanceOf"): {before.get("strategy.balanceOf")}')
+            print(f'want_required_from_strat : {want_required_from_strat}')
+            print(f'before.get("strategy.balanceOf") - want_required_from_strat : {before.get("strategy.balanceOf") - want_required_from_strat}')
+            print(f'after.get("strategy.balanceOf") : {after.get("strategy.balanceOf")}')
             assert approx(
                 before.get("strategy.balanceOf") - want_required_from_strat,
                 after.get("strategy.balanceOf"),
-                1,
+                4,
             )
 
         # 3.
@@ -295,10 +302,12 @@ class StrategyCoreResolver:
             >>> fee
             2e+17
         """
+        print(f'after.balances("sett", "treasury") : {after.balances("sett", "treasury")}')
+        print(f'before.balances("sett", "treasury") + fee : {before.balances("sett", "treasury") + fee}')
         assert approx(
             after.balances("sett", "treasury"),
             before.balances("sett", "treasury") + fee,
-            1,
+            2,
         )
 
         # 4.
@@ -313,7 +322,7 @@ class StrategyCoreResolver:
         assert approx(
             after.get("sett.balance"),
             before.get("sett.balance") - expected_want + fee_in_want,
-            1,
+            2,
         )
 
         self.hook_after_confirm_withdraw(before, after, params)
