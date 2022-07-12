@@ -100,14 +100,14 @@ contract MyStrategy is BaseStrategy {
     function _withdrawAll() internal override {
         // Add code here to unlock all available funds
         uint256 LP_Token_Stk_Bal = IERC20Upgradeable(WRENSBTC_GAUGE_DEPOSIT).balanceOf(address(this));
-        require(LP_Token_Stk_Bal > 0, "No LP Token at withdraw All");
+        // require(LP_Token_Stk_Bal > 0, "No LP Token at withdraw All");
         IWRENSBTC_GAUGE_DEPOSIT.withdraw(LP_Token_Stk_Bal);
         uint256 LP_Token_Stk_Bal_Aft = IWRENSBTC_GAUGE_DEPOSIT.balanceOf(address(this));
-        require(LP_Token_Stk_Bal_Aft == 0, "STK LP Token balance non-zero after withdraw");
+        // require(LP_Token_Stk_Bal_Aft == 0, "STK LP Token balance non-zero after withdraw");
         uint256 LP_Token_Bal = IERC20Upgradeable(WRENSBTC_LPTOKEN).balanceOf(address(this));
         IWRENSBTC_POOL.removeLiquidityOneToken(LP_Token_Stk_Bal, 0, 0, block.timestamp); // to fix minOut (front running risk)
         uint256 LP_Token_Bal_Aft = IERC20Upgradeable(WRENSBTC_LPTOKEN).balanceOf(address(this));
-        require(LP_Token_Bal_Aft == 0, "LP Token balance non-zero after withdrawAll");
+        // require(LP_Token_Bal_Aft == 0, "LP Token balance non-zero after withdrawAll");
     }
 
     // function _calculateTokenAmount(uint256[3] calldata amounts, bool deposit) internal returns (uint256) {
@@ -152,7 +152,8 @@ contract MyStrategy is BaseStrategy {
 
         // Sell for more want
         harvested = new TokenAmount[](1);
-        // harvested[0] = TokenAmount(REWARD, 0);
+        harvested[0] = TokenAmount(REWARD, 0);
+        // harvested[1] = TokenAmount(want, 0);
 
         if (allRewards > 0) {
             harvested[0] = TokenAmount(REWARD, allRewards);
@@ -162,19 +163,18 @@ contract MyStrategy is BaseStrategy {
             path[1] = WETH;
             path[2] = want;
 
-            // IRouter(ROUTER).swapExactTokensForTokens(allRewards.mul(1).div(10), 0, path, address(this), block.timestamp);
+            // IRouter(ROUTER).swapExactTokensForTokens(allRewards, 0, path, address(this), block.timestamp);
         } else {
             harvested[0] = TokenAmount(REWARD, 0);
         }
+        _withdrawAll();
+        uint256 wantBalance = IERC20Upgradeable(want).balanceOf(address(this)); // Cache to save gas on worst case
+        _deposit(wantBalance);
 
         uint256 wantHarvested = IERC20Upgradeable(want).balanceOf(address(this)).sub(beforeWant);
 
         // Report profit for the want increase (NOTE: We are not getting perf fee on AAVE APY with this code)
         // _reportToVault(wantHarvested);
-
-        // _withdrawAll();
-        // uint256 wantBalance = IERC20Upgradeable(want).balanceOf(address(this)); // Cache to save gas on worst case
-        // _deposit(wantBalance);
 
         // Use this if your strategy doesn't sell the extra tokens
         // This will take fees and send the token to the badgerTree
