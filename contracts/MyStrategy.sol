@@ -138,7 +138,7 @@ contract MyStrategy is BaseStrategy {
 
     /// @dev Does this function require `tend` to be called?
     function _isTendable() internal pure override returns (bool) {
-        return false; // Change to true if the strategy should be tended
+        return true; // Change to true if the strategy should be tended
     }
 
     function _harvest() internal override returns (TokenAmount[] memory harvested) {
@@ -148,7 +148,7 @@ contract MyStrategy is BaseStrategy {
         ISDL_MINTER.mint(WRENSBTC_GAUGE_DEPOSIT);
         IWRENSBTC_GAUGE_DEPOSIT.claim_rewards(address(this));
         uint256 allRewards = IERC20Upgradeable(REWARD).balanceOf(address(this));
-        require(allRewards > 0, "No SDL Rewards");
+        // require(allRewards > 0, "No SDL Rewards");
 
         // Sell for more want
         harvested = new TokenAmount[](1);
@@ -162,7 +162,7 @@ contract MyStrategy is BaseStrategy {
             path[1] = WETH;
             path[2] = want;
 
-            IRouter(ROUTER).swapExactTokensForTokens(allRewards, 0, path, address(this), block.timestamp);
+            // IRouter(ROUTER).swapExactTokensForTokens(allRewards.mul(1).div(10), 0, path, address(this), block.timestamp);
         } else {
             harvested[0] = TokenAmount(REWARD, 0);
         }
@@ -170,15 +170,15 @@ contract MyStrategy is BaseStrategy {
         uint256 wantHarvested = IERC20Upgradeable(want).balanceOf(address(this)).sub(beforeWant);
 
         // Report profit for the want increase (NOTE: We are not getting perf fee on AAVE APY with this code)
-        _reportToVault(wantHarvested);
+        // _reportToVault(wantHarvested);
 
-        _withdrawAll();
-        uint256 wantBalance = IERC20Upgradeable(want).balanceOf(address(this)); // Cache to save gas on worst case
-        _deposit(wantBalance);
+        // _withdrawAll();
+        // uint256 wantBalance = IERC20Upgradeable(want).balanceOf(address(this)); // Cache to save gas on worst case
+        // _deposit(wantBalance);
 
         // Use this if your strategy doesn't sell the extra tokens
         // This will take fees and send the token to the badgerTree
-        // _processExtraToken(token, amount);
+        _processExtraToken(REWARD, allRewards);
 
         return harvested;
     }
@@ -201,16 +201,16 @@ contract MyStrategy is BaseStrategy {
         // Change this to return the amount of want invested in another protocol
         uint256 LP_Token_Stk_Bal = IERC20Upgradeable(WRENSBTC_GAUGE_DEPOSIT).balanceOf(address(this));
         // require(LP_Token_Stk_Bal > 0, "No STK LP in balanceOfPool");
-        uint256 balance = IWRENSBTC_POOL.calculateRemoveLiquidityOneToken(LP_Token_Stk_Bal, 0);
+        // uint256 balance = IWRENSBTC_POOL.calculateRemoveLiquidityOneToken(LP_Token_Stk_Bal, 0);
         // require(balance > 0, "0 Balance");
-        return balance;
+        // return balance;
 
-        // if (LP_Token_Stk_Bal > 0) {
-        //     uint256 balance = IWRENSBTC_POOL.calculateRemoveLiquidityOneToken(LP_Token_Stk_Bal, 0);
-        //     return balance;
-        // } else {
-        //     return 0;
-        // }
+        if (LP_Token_Stk_Bal > 0) {
+            uint256 balance = IWRENSBTC_POOL.calculateRemoveLiquidityOneToken(LP_Token_Stk_Bal, 0);
+            return balance;
+        } else {
+            return 0;
+        }
     }
 
     /// @dev Return the balance of rewards that the strategy has accrued

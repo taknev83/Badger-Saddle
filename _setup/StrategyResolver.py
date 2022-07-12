@@ -13,6 +13,7 @@ class StrategyResolver(StrategyCoreResolver):
         strategy = self.manager.strategy
         return {
             "Want": strategy.want(),
+            # "SDL": strategy.REWARD()
         }
 
     def hook_after_confirm_withdraw(self, before, after, params):
