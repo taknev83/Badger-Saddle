@@ -17,6 +17,12 @@ import {ISDLMinter} from "../interfaces/Saddle/ISDLMinter.sol";
 import {IRouter} from "../interfaces/sushi/IRouter.sol";
 
 contract MyStrategy is BaseStrategy {
+    using SafeERC20Upgradeable for IERC20Upgradeable;
+    using AddressUpgradeable for address;
+    using SafeMathUpgradeable for uint256;
+
+    event Debug(string name, uint256 value);
+
     // address public want; // Inherited from BaseStrategy
     // address public lpComponent; // Token that represents ownership in a pool, not always used
     // address public reward; // Token we farm
@@ -30,6 +36,9 @@ contract MyStrategy is BaseStrategy {
     address constant REWARD = 0xf1Dc500FdE233A4055e25e5BbF516372BC4F6871; //SDL Token
     // address constant ROUTER = 0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f;
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+
+    // token ID of the sBTC in BTCv2 pool
+    uint8 token_id = 2;
 
     ISwap public constant IWRENSBTC_POOL = ISwap(0xdf3309771d2BF82cb2B6C56F9f5365C8bD97c4f2);
     IGaugeDeposit public constant IWRENSBTC_GAUGE_DEPOSIT = IGaugeDeposit(0x17Bde8EBf1E9FDA85b9Bd1a104266b394E9Db33e);
@@ -82,37 +91,39 @@ contract MyStrategy is BaseStrategy {
     /// @dev Deposit `_amount` of want, investing it to earn yield
     function _deposit(uint256 _amount) internal override {
         // Add code here to invest `_amount` of want to earn yield
-        // adding liquidity in WBTC.
+        // adding liquidity in sBTC.
         uint256[] memory _amounts = new uint256[](3);
-        _amounts[0] = _amount;
+        _amounts[0] = 0;
         _amounts[1] = 0;
-        _amounts[2] = 0;
-        IWRENSBTC_POOL.addLiquidity(_amounts, 0, block.timestamp);
+        _amounts[2] = _amount;
+        IWRENSBTC_POOL.addLiquidity(_amounts, token_id, block.timestamp);
         uint256 LP_Token_Bal = IERC20Upgradeable(WRENSBTC_LPTOKEN).balanceOf(address(this));
         require(LP_Token_Bal > 0, "No LP Token after addLiquidity");
         // staking the LP token
         IWRENSBTC_GAUGE_DEPOSIT.deposit(LP_Token_Bal, address(this), true);
         uint256 LP_Token_Stk_Bal = IERC20Upgradeable(WRENSBTC_GAUGE_DEPOSIT).balanceOf(address(this));
         require(LP_Token_Stk_Bal > 0, "No STK LP Token after deposit");
+        emit Debug("Deposit", _amount);
     }
 
     /// @dev Withdraw all funds, this is used for migrations, most of the time for emergency reasons
     function _withdrawAll() internal override {
         // Add code here to unlock all available funds
+        uint256 balBefore = balanceOfWant();
         uint256 LP_Token_Stk_Bal = IERC20Upgradeable(WRENSBTC_GAUGE_DEPOSIT).balanceOf(address(this));
         // require(LP_Token_Stk_Bal > 0, "No LP Token at withdraw All");
         IWRENSBTC_GAUGE_DEPOSIT.withdraw(LP_Token_Stk_Bal);
         uint256 LP_Token_Stk_Bal_Aft = IWRENSBTC_GAUGE_DEPOSIT.balanceOf(address(this));
         // require(LP_Token_Stk_Bal_Aft == 0, "STK LP Token balance non-zero after withdraw");
         uint256 LP_Token_Bal = IERC20Upgradeable(WRENSBTC_LPTOKEN).balanceOf(address(this));
-        IWRENSBTC_POOL.removeLiquidityOneToken(LP_Token_Stk_Bal, 0, 0, block.timestamp); // to fix minOut (front running risk)
+        // To calculate minimum balance out from removeLiquidityOne Token
+        uint256 balance = IWRENSBTC_POOL.calculateRemoveLiquidityOneToken(LP_Token_Bal, 2);
+        IWRENSBTC_POOL.removeLiquidityOneToken(LP_Token_Bal, token_id, balance.mul(999).div(1000), block.timestamp); // cross check minOut (front running risk)
         uint256 LP_Token_Bal_Aft = IERC20Upgradeable(WRENSBTC_LPTOKEN).balanceOf(address(this));
+        uint256 balAfter = balanceOfWant();
+        emit Debug("withdrawAll", balAfter.sub(balBefore));
         // require(LP_Token_Bal_Aft == 0, "LP Token balance non-zero after withdrawAll");
     }
-
-    // function _calculateTokenAmount(uint256[3] calldata amounts, bool deposit) internal returns (uint256) {
-    //     IWRENSBTC_POOL.calculateTokenAmount(amounts, deposit);
-    // }
 
     /// @dev Withdraw `_amount` of want, so that it can be sent to the vault / depositor
     /// @notice just unlock the funds and return the amount you could unlock
@@ -125,15 +136,19 @@ contract MyStrategy is BaseStrategy {
         }
         uint256 balBefore = balanceOfWant();
         uint256[] memory _amounts = new uint256[](3);
-        _amounts[0] = _amount;
+        _amounts[0] = 0;
         _amounts[1] = 0;
-        _amounts[2] = 0;
+        _amounts[2] = _amount;
         uint256 withdrawTokenAmount = IWRENSBTC_POOL.calculateTokenAmount(_amounts, false);
         IWRENSBTC_GAUGE_DEPOSIT.withdraw(withdrawTokenAmount);
         uint256 LP_Token_Bal = IERC20Upgradeable(WRENSBTC_LPTOKEN).balanceOf(address(this));
-        IWRENSBTC_POOL.removeLiquidityOneToken(withdrawTokenAmount, 0, 0, block.timestamp); // to fix minOut (front running risk)
+        // To calculate minimum balance out from removeLiquidityOne Token
+        uint256 balance = IWRENSBTC_POOL.calculateRemoveLiquidityOneToken(LP_Token_Bal, 2);
+        IWRENSBTC_POOL.removeLiquidityOneToken(withdrawTokenAmount, 2, balance.mul(999).div(1000), block.timestamp); // cross check minOut (front running risk)
         uint256 balAfter = balanceOfWant();
-        return balAfter.sub(balBefore);
+        emit Debug("withdrawSome", balAfter.sub(balBefore));
+        // return balAfter.sub(balBefore);
+        return _amount;
     }
 
     /// @dev Does this function require `tend` to be called?
@@ -150,10 +165,10 @@ contract MyStrategy is BaseStrategy {
         uint256 allRewards = IERC20Upgradeable(REWARD).balanceOf(address(this));
         // require(allRewards > 0, "No SDL Rewards");
 
-        // Sell for more want
+        // Reward token (SDL) is fully distributed to users via processExtraToken, as SDL token liquidity in sushi swap is limited
+        // LP fees is harvested & re-deposited
         harvested = new TokenAmount[](1);
         harvested[0] = TokenAmount(REWARD, 0);
-        // harvested[1] = TokenAmount(want, 0);
 
         if (allRewards > 0) {
             harvested[0] = TokenAmount(REWARD, allRewards);
@@ -200,13 +215,9 @@ contract MyStrategy is BaseStrategy {
     function balanceOfPool() public view override returns (uint256) {
         // Change this to return the amount of want invested in another protocol
         uint256 LP_Token_Stk_Bal = IERC20Upgradeable(WRENSBTC_GAUGE_DEPOSIT).balanceOf(address(this));
-        // require(LP_Token_Stk_Bal > 0, "No STK LP in balanceOfPool");
-        // uint256 balance = IWRENSBTC_POOL.calculateRemoveLiquidityOneToken(LP_Token_Stk_Bal, 0);
-        // require(balance > 0, "0 Balance");
-        // return balance;
 
         if (LP_Token_Stk_Bal > 0) {
-            uint256 balance = IWRENSBTC_POOL.calculateRemoveLiquidityOneToken(LP_Token_Stk_Bal, 0);
+            uint256 balance = IWRENSBTC_POOL.calculateRemoveLiquidityOneToken(LP_Token_Stk_Bal, 2);
             return balance;
         } else {
             return 0;

@@ -266,7 +266,7 @@ class StrategyCoreResolver:
             assert approx(
                 before.get("strategy.balanceOf") - want_required_from_strat,
                 after.get("strategy.balanceOf"),
-                4,
+                1,
             )
 
         # 3.
@@ -319,6 +319,10 @@ class StrategyCoreResolver:
             1,
         )
         # Withdrawal should decrease balance of sett
+        print(f'after.get("sett.balance") : {after.get("sett.balance")}')
+        print(f'before.get("sett.balance") : {before.get("sett.balance")}')
+        print(f'expected_want : {expected_want}')
+        print(f'fee_in_want : {fee_in_want}')
         assert approx(
             after.get("sett.balance"),
             before.get("sett.balance") - expected_want + fee_in_want,

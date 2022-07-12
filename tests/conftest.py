@@ -171,6 +171,14 @@ def performanceFeeStrategist(deployed):
 def withdrawalFee(deployed):
     return deployed.withdrawalFee
 
+@pytest.fixture
+def LPToken():
+    return interface.IERC20("0xF32E91464ca18fc156aB97a697D6f8ae66Cd21a3")
+
+@pytest.fixture
+def StkLPToken():
+    return interface.IERC20("0x17Bde8EBf1E9FDA85b9Bd1a104266b394E9Db33e")
+
 
 @pytest.fixture
 def setup_share_math(deployer, vault, want, governance):
